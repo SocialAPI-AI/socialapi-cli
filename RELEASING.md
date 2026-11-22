@@ -72,11 +72,7 @@ npm login
 npm publish --access public
 ```
 
-npm asks for your two-factor code. The package page is then `https://www.npmjs.com/package/socialapi-cli`. Optionally, point people from the placeholder to the real releases:
-
-```sh
-npm deprecate socialapi-cli@0.0.0 "Placeholder version, install socialapi-cli@latest"
-```
+npm asks for your two-factor code. The package page is then `https://www.npmjs.com/package/socialapi-cli`.
 
 ### 3. Add the trusted publisher on npm
 
@@ -111,6 +107,8 @@ gh variable set PUBLISH --body true --repo SocialAPI-AI/socialapi-cli
 ### 5. Publish within 2 days
 
 If no API release is due within 2 days of step 3, [run the release by hand](#running-the-release-by-hand). It publishes the current `API_VERSION`, which validates the trusted publisher, then creates the tag and the GitHub Release. The package page on npm then shows the provenance of the release (it links the published version to this repo and this workflow run).
+
+Optionally, once that first workflow release is on npm, point people from the placeholder to the real releases with `npm deprecate socialapi-cli@0.0.0 "Placeholder version, install socialapi-cli@latest"`.
 
 ### 6. Allow only trusted publishing
 
