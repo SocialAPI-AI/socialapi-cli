@@ -4,7 +4,7 @@
 
 /** @type {GlobalFlag[]} */
 export const GLOBAL_FLAGS = [
-  { flag: 'api-key', type: 'string', value: 'key', description: 'API key to send. Default: the SOCIALAPI_API_KEY environment variable.' },
+  { flag: 'api-key', type: 'string', value: 'key', description: 'API key to send. Default: the SOCIALAPI_API_KEY environment variable, then the key stored by socialapi login.' },
   { flag: 'base-url', type: 'string', value: 'url', description: 'API base URL. Default: the SOCIALAPI_BASE_URL environment variable, then the URL from the API reference.' },
   { flag: 'data', type: 'string', value: 'json', description: 'Whole JSON request body: inline JSON, @file to read a file, or - to read stdin. Individual flags override its top-level fields.' },
   { flag: 'output', type: 'string', value: 'file', description: 'Write the response body to this file instead of stdout.' },

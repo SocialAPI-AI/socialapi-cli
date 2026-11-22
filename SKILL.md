@@ -11,14 +11,24 @@ Install it with `npm install -g socialapi-cli` (Node.js 20 or later).
 
 ## Authenticate
 
-Set the API key in the environment, or pass it per command:
+The first credential found wins: the `--api-key` flag, then the `SOCIALAPI_API_KEY` environment variable, then the key stored by `socialapi login`.
+
+In a non-interactive session (CI, a sandbox, an agent without a browser), use the environment variable, or store a key the person gives you:
 
 ```sh
 export SOCIALAPI_API_KEY=sapi_key_...
-socialapi list-accounts --api-key sapi_key_...
+socialapi login --with-api-key < key.txt
 ```
 
-`--api-key` wins over `SOCIALAPI_API_KEY`. Without a key, commands exit with code 2 and the error code `no_credential`.
+When a person is at the computer, `socialapi login` signs in through their browser and stores a new API key. It prints the sign-in URL on stderr; with `--no-browser` it only prints it, so you can hand the URL to the person. It waits up to 5 minutes for them to approve access, then prints `{"logged_in":true,"base_url":"...","user":{...}}`.
+
+Check which account the credential belongs to before acting:
+
+```sh
+socialapi whoami
+```
+
+Without a credential, commands exit with code 2 and the error code `no_credential`: ask the person to run `socialapi login`, or to provide an API key. The stored key is used only for the base URL it was saved for. `socialapi logout` removes it (and deletes it on the API when `socialapi login` created it). Keys never appear in the output, not even with `--verbose`.
 
 ## Discover commands
 
@@ -57,7 +67,7 @@ Help shows the positional arguments (the path parameters, in order), every flag 
 | --- | --- | --- |
 | 0 | Success | Use stdout. |
 | 1 | The API returned an error | Read `error.code` and `error.message` on stderr. |
-| 2 | Invalid usage (`invalid_usage`), no API key (`no_credential`) or a base URL that is not https (`insecure_base_url`) | Fix the command; check `socialapi <command> --help`. |
+| 2 | Invalid usage (`invalid_usage`), no API key (`no_credential`), a base URL that is not https (`insecure_base_url`) or a browser sign-in that was not finished in time (`login_timeout`) | Fix the command; check `socialapi <command> --help`. For `no_credential`, sign in first. |
 | 3 | The API could not be reached (`network_error`, `timeout`) | Retry later, or raise `--timeout`. |
 
 The CLI already retries a `429` response up to 3 times, waiting for `Retry-After`.
