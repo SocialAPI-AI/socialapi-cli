@@ -8,9 +8,9 @@ on:
     paths: [API_VERSION]
   workflow_dispatch:
 
-# One release at a time; a run in progress is never cancelled.
+# One release at a time per branch; a run in progress is never cancelled.
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions: {}
@@ -29,6 +29,8 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+      - name: Check API_VERSION
+        run: node scripts/release/version.mjs --check
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 24
@@ -37,8 +39,11 @@ jobs:
       - run: npm run generate
       - run: npm run typecheck
       - run: npm test
-      - name: Decide from API_VERSION and npm
+      - name: Decide from API_VERSION, npm and the GitHub Releases
         id: decision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: node scripts/release/version.mjs
       - name: Nothing to release
         if: steps.decision.outputs.action == 'skip'
@@ -46,10 +51,15 @@ jobs:
           REASON: ${{ steps.decision.outputs.reason }}
         run: echo "::notice title=No release::$REASON"
       - name: Already on npm
-        if: steps.decision.outputs.action == 'release'
+        if: steps.decision.outputs.action == 'release' && vars.PUBLISH == 'true'
         env:
           REASON: ${{ steps.decision.outputs.reason }}
-        run: echo "::notice title=Tag and GitHub Release only::$REASON"
+        run: echo "::notice title=GitHub Release only::$REASON"
+      - name: Already on npm (dry-run mode)
+        if: steps.decision.outputs.action == 'release' && vars.PUBLISH != 'true'
+        env:
+          VERSION: ${{ steps.decision.outputs.version }}
+        run: echo "::notice title=Dry run::$VERSION is already on npm without its GitHub Release. Set the repository variable PUBLISH to true, then run the release again to create the Release."
       - name: Set the package version (not committed)
         if: steps.decision.outputs.action == 'publish'
         env:
@@ -62,13 +72,15 @@ jobs:
         if: steps.decision.outputs.action == 'publish' && vars.PUBLISH != 'true'
         env:
           VERSION: ${{ steps.decision.outputs.version }}
-        run: echo "::notice title=Dry run::socialapi-cli@$VERSION is ready. Set the repository variable PUBLISH to true to publish it."
+        run: echo "::notice title=Dry run::socialapi-cli@$VERSION is ready. Nothing was published, tagged or released. Set the repository variable PUBLISH to true to publish it."
 
   publish:
     name: Publish to npm
     needs: check
     if: needs.check.outputs.action == 'publish' && vars.PUBLISH == 'true'
     runs-on: ubuntu-latest
+    # The npm environment only deploys from main; the trusted publisher on npm names it.
+    environment: npm
     permissions:
       contents: read
       id-token: write # npm trusted publishing (OIDC), no stored token
@@ -106,6 +118,10 @@ jobs:
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.check.outputs.version }}
         run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "The GitHub Release v$VERSION already exists."
+            exit 0
+          fi
           cat > notes.md <<EOF
           socialapi-cli $VERSION follows the SocialAPI API v$VERSION.
 
@@ -117,6 +133,7 @@ jobs:
 
           Package: https://www.npmjs.com/package/socialapi-cli/v/$VERSION
           EOF
+          # Uses the tag v$VERSION when it exists, otherwise creates it on this commit.
           gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md
 
   report-failure:
@@ -134,17 +151,28 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          API_VERSION="$(gh api "repos/$GH_REPO/contents/API_VERSION?ref=$GITHUB_SHA" --jq .content | base64 -d | tr -d '[:space:]')" || API_VERSION=""
-          API_VERSION="${API_VERSION:-unknown}"
+          if CONTENT="$(gh api "repos/$GH_REPO/contents/API_VERSION?ref=$GITHUB_SHA" --jq .content 2>/dev/null)"; then
+            API_VERSION="$(printf '%s' "$CONTENT" | base64 -d | tr -d '\r\n')"
+            if [[ "$API_VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              TITLE="Release for API version $API_VERSION needs attention"
+              WHAT="The release run for API version \`$API_VERSION\` did not finish"
+            else
+              TITLE="Release needs attention: API_VERSION is malformed"
+              WHAT="The release run stopped because API_VERSION is not of the form vMAJOR.MINOR.PATCH"
+            fi
+          else
+            TITLE="Release needs attention: API_VERSION is missing"
+            WHAT="The release run stopped because API_VERSION is not in the repository yet"
+          fi
+          BODY="$WHAT: $RUN_URL
+
+          $GITHUB_SERVER_URL/$GH_REPO/blob/main/RELEASING.md explains how to finish the release."
           if ! gh label list --search release-failed --json name --jq '.[].name' | grep -qx release-failed; then
             gh label create release-failed --color d93f0b --description "A release run needs attention"
           fi
-          BODY="The release run for API version \`$API_VERSION\` did not finish: $RUN_URL
-
-          $GITHUB_SERVER_URL/$GH_REPO/blob/main/RELEASING.md explains how to finish the release."
           ISSUE="$(gh issue list --label release-failed --state open --limit 1 --json number --jq '.[0].number // empty')"
           if [ -n "$ISSUE" ]; then
             gh issue comment "$ISSUE" --body "$BODY"
           else
-            gh issue create --title "Release for API version $API_VERSION needs attention" --label release-failed --body "$BODY"
+            gh issue create --title "$TITLE" --label release-failed --body "$BODY"
           fi
