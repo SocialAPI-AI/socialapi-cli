@@ -1,0 +1,15 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Reserved name fixture", "version": "1.0" },
+  "servers": [{ "url": "https://example.test/v1" }],
+  "paths": {
+    "/login": {
+      "post": {
+        "operationId": "login",
+        "tags": ["Auth"],
+        "summary": "Sign in",
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}
