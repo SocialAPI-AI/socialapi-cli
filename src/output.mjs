@@ -10,7 +10,7 @@ export function writeJson(stream, value, pretty) {
 
 /**
  * Prints rows as two aligned columns.
- * @param {[string, string][]} rows
+ * @param {string[][]} rows
  * @param {string} [indent]
  */
 export function columns(rows, indent = '  ') {

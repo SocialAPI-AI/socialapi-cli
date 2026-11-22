@@ -15,6 +15,9 @@ function valueHint(f) {
   return ` <${f.type}>`;
 }
 
+/** Flag and argument rows stay on one line each. */
+const oneLine = (text) => text.replace(/\s+/g, ' ').trim();
+
 function globalRows(flags) {
   return flags.map((g) => [`--${g.flag}${g.value ? ` <${g.value}>` : ''}`, g.description]);
 }
@@ -26,7 +29,7 @@ function globalRows(flags) {
 export function globalHelp(manifest, builtins) {
   const sections = [
     'socialapi: the command-line client for the SocialAPI REST API.',
-    'Usage:\n  socialapi <command> [arguments] [flags]\n  socialapi <command> --help',
+    'Usage: socialapi <command> [arguments] [flags]',
   ];
   for (const tag of manifest.tags) {
     const rows = manifest.commands.filter((c) => c.tag === tag).map((c) => [c.name, c.summary]);
@@ -47,7 +50,7 @@ export function commandHelp(cmd) {
   sections.push(`${cmd.method} ${cmd.path}`);
 
   if (cmd.args.length) {
-    const rows = cmd.args.map((a) => [`<${a.name}>`, [`${a.type}, required.`, a.enum && `One of: ${a.enum.join(', ')}.`, a.description].filter(Boolean).join(' ')]);
+    const rows = cmd.args.map((a) => [`<${a.name}>`, [`${a.type}, required.`, a.enum && `One of: ${a.enum.join(', ')}.`, a.description].filter(Boolean).join(' ')]).map(([k, v]) => [k, oneLine(v)]);
     sections.push(`Arguments:\n${columns(rows)}`);
   }
   if (cmd.flags.length) {
@@ -59,7 +62,7 @@ export function commandHelp(cmd) {
         f.description,
         renamed && `(Sends the ${f.in} field "${f.name}": the flag is renamed because --${kebabCase(f.name)} is taken.)`,
       ];
-      return [`--${f.flag}${valueHint(f)}`, details.filter(Boolean).join(' ')];
+      return [`--${f.flag}${valueHint(f)}`, oneLine(details.filter(Boolean).join(' '))];
     });
     sections.push(`Flags:\n${columns(rows)}`);
   }

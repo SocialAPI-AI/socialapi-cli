@@ -1,3 +1,5 @@
+import { usageError } from './errors.mjs';
+
 /** Levenshtein distance between two strings. */
 function distance(a, b) {
   let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -25,4 +27,14 @@ export function nearest(input, names, max = 5) {
     .sort((a, b) => a.d - b.d || a.name.localeCompare(b.name))
     .slice(0, max)
     .map(({ name }) => name);
+}
+
+/**
+ * The error for a command name that is neither generated nor built in.
+ * @param {string} name
+ * @param {{ manifest: { commands: { name: string }[] }, builtins: { name: string }[] }} ctx
+ */
+export function unknownCommand(name, ctx) {
+  const hint = nearest(name, [...ctx.manifest.commands.map((c) => c.name), ...ctx.builtins.map((b) => b.name)]);
+  return usageError(`Unknown command "${name}".${hint.length ? ` Did you mean ${hint.join(', ')}?` : ''} Run socialapi commands <text> to search the commands.`);
 }

@@ -41,6 +41,7 @@ export async function send({ method, url, headers = {}, body, token, timeoutSeco
   const log = (line) => {
     if (verbose) stderr.write(`socialapi: ${token ? line.split(token).join('***') : line}\n`);
   };
+  /** @type {Record<string, string>} */
   const requestHeaders = { 'user-agent': `socialapi-cli/${VERSION}`, accept: 'application/json, */*', ...headers };
   if (token) requestHeaders.authorization = `Bearer ${token}`;
 

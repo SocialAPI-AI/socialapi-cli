@@ -5,7 +5,7 @@ import { GLOBAL_FLAGS } from './flags.mjs';
 import { builtinHelp, commandHelp, globalHelp } from './help.mjs';
 import { loadManifest } from './manifest.mjs';
 import { runOperation } from './operation.mjs';
-import { nearest } from './suggest.mjs';
+import { unknownCommand } from './suggest.mjs';
 
 /**
  * @typedef {{ write(chunk: string | Uint8Array): any, isTTY?: boolean }} Output
@@ -81,13 +81,4 @@ export async function main(argv, options = {}) {
     ctx.stderr.write(`${JSON.stringify({ error: { code: error.code, message: error.message } })}\n`);
     return error.exitCode;
   }
-}
-
-/** @param {string} name @param {Context} ctx */
-export function unknownCommand(name, ctx) {
-  const names = [...ctx.manifest.commands.map((c) => c.name), ...ctx.builtins.map((b) => b.name)];
-  const hint = nearest(name, names);
-  return usageError(
-    `Unknown command "${name}".${hint.length ? ` Did you mean ${hint.join(', ')}?` : ''} Run socialapi commands <text> to search the commands.`,
-  );
 }
