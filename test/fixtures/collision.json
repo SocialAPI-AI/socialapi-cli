@@ -1,0 +1,47 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Collision fixture", "version": "1.0" },
+  "servers": [{ "url": "https://example.test/v1" }],
+  "paths": {
+    "/things/{thing_id}": {
+      "post": {
+        "operationId": "searchThings",
+        "tags": ["Things"],
+        "summary": "Search things",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "thing_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "verbose", "in": "query", "schema": { "type": "boolean" }, "description": "Verbose results" },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "limit", "in": "header", "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["limit"],
+                "properties": {
+                  "body_limit": { "type": "string" },
+                  "limit": { "type": "integer" },
+                  "data": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } } }
+      }
+    },
+    "/public": {
+      "get": {
+        "operationId": "getPublicThing",
+        "tags": ["Things"],
+        "summary": "Get a public thing",
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  },
+  "components": { "securitySchemes": { "BearerAuth": { "type": "http", "scheme": "bearer" } } }
+}

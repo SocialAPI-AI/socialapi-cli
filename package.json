@@ -1,0 +1,43 @@
+{
+  "name": "socialapi-cli",
+  "version": "0.0.0",
+  "description": "Command-line client for the SocialAPI REST API, generated from its OpenAPI spec.",
+  "type": "module",
+  "bin": {
+    "socialapi": "bin/socialapi.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "generated",
+    "SKILL.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SocialAPI-AI/socialapi-cli.git"
+  },
+  "homepage": "https://github.com/SocialAPI-AI/socialapi-cli#readme",
+  "keywords": [
+    "socialapi",
+    "cli",
+    "social-media",
+    "api"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run generate && node scripts/test.mjs",
+    "prepack": "npm run generate"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^7.0.2"
+  }
+}
