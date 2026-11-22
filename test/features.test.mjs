@@ -28,7 +28,7 @@ function assertCliError(result, code, exitCode = 2) {
   const error = errorOf(result);
   assert.equal(error.error.code, code);
   assert.equal(typeof error.error.message, 'string');
-  assert.ok(!result.stderr.includes('—'), 'no em dash in errors');
+  assert.ok(!result.stderr.includes('\u2014'), 'no em dash in errors');
   assert.equal(result.stdout, '');
 }
 

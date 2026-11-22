@@ -110,3 +110,18 @@ test('an API error prints the API error body unchanged on stderr and exits 1', a
   assert.equal(result.stdout, '');
   assert.equal(result.stderr, `${raw}\n`);
 });
+
+test('global flags may come before the command name', async () => {
+  api.respond({ body: { ok: true } });
+  const result = await cli(['--api-key', 'sapi_key_before', '--pretty', 'list-accounts', '--brand-id', 'b1']);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(api.requests[0].headers.authorization, 'Bearer sapi_key_before');
+  assert.equal(api.requests[0].query.get('brand_id'), 'b1');
+  assert.equal(result.stdout, '{\n  "ok": true\n}\n');
+});
+
+test('a flag alone with no command exits 2', async () => {
+  const result = await cli(['--pretty']);
+  assert.equal(result.code, 2);
+  assert.equal(errorOf(result).error.code, 'invalid_usage');
+});
