@@ -1,5 +1,4 @@
 // Decides what the release workflow does for the version in API_VERSION.
-// `node scripts/release/version.mjs --check` only checks that API_VERSION exists and is well formed.
 // `node scripts/release/version.mjs` prints the decision and writes action, version and reason to GITHUB_OUTPUT:
 //   publish  the version is not on npm and is greater than the latest published one (or nothing was ever published)
 //   release  the version is already on npm but its GitHub Release is missing: create the Release (and the tag
@@ -34,19 +33,26 @@ export function parseApiVersion(text) {
 }
 
 /**
+ * Reads an API_VERSION file, with a clear message when it is missing.
+ * @param {string} file
+ * @returns {string}
+ */
+function readApiVersionText(file) {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    throw new Error('API_VERSION is missing. It arrives with the first spec push from an API release, then the release can run.');
+  }
+}
+
+/**
  * Reads and parses an API_VERSION file.
  * @param {string} file
  * @returns {string}
  */
 export function readApiVersion(file) {
-  let text;
-  try {
-    text = readFileSync(file, 'utf8');
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-    throw new Error('API_VERSION is missing. It arrives with the first spec push from an API release, then the release can run.');
-  }
-  return parseApiVersion(text);
+  return parseApiVersion(readApiVersionText(file));
 }
 
 /** @param {string} version */
@@ -158,14 +164,8 @@ function writeOutputs(values) {
 }
 
 async function main() {
-  if (process.argv.includes('--check')) {
-    const version = readApiVersion(API_VERSION_FILE);
-    console.log(`API_VERSION is v${version}, the release version is ${version}.`);
-    writeOutputs({ version });
-    return;
-  }
   const decision = await resolveRelease({
-    apiVersionText: readFileSync(API_VERSION_FILE, 'utf8'),
+    apiVersionText: readApiVersionText(API_VERSION_FILE),
     lookupPublished: npmPublishedVersions,
     lookupTag: remoteTagExists,
     lookupRelease: githubReleaseExists,

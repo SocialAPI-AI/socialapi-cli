@@ -6,8 +6,8 @@ Every SocialAPI API release publishes `socialapi-cli` at the same version: API `
 
 1. For every API release tag `vX.Y.Z`, the API's release automation pushes one commit to `main` of this repo, `chore: spec from api vX.Y.Z`, with two files at the root: `openapi.json` (the published spec for that tag) and `API_VERSION` (the tag, for example `v1.10.4`). That automation needs write access to this repo's contents.
 2. The push changes `API_VERSION`, which starts the [Release workflow](.github/workflows/release.yml).
-3. The workflow first checks that `API_VERSION` is one line of the form `vMAJOR.MINOR.PATCH`. It then installs the dependencies, generates the command manifest, type-checks and runs the tests on that commit.
-4. It removes the `v` from `API_VERSION` and compares the version with the versions already on npm and with the GitHub Releases of this repo:
+3. The workflow installs the dependencies, generates the command manifest, type-checks and runs the tests on that commit.
+4. It reads `API_VERSION`, which must be one line of the form `vMAJOR.MINOR.PATCH`, removes the `v` and compares the version with the versions already on npm and with the GitHub Releases of this repo:
 
    | Situation | Decision | What happens |
    | --- | --- | --- |
@@ -45,7 +45,7 @@ A failed run opens an issue labelled `release-failed` with the API version (or t
 
 1. Open the run linked in the issue and find the job that failed.
 2. Fix the cause:
-   - **Test and decide**: `API_VERSION` is missing or is not `vMAJOR.MINOR.PATCH` (step "Check API_VERSION"), or the tests or the type-check failed with the new spec. Fix it through a pull request to `main`.
+   - **Test and decide**: `API_VERSION` is missing or is not `vMAJOR.MINOR.PATCH` (step "Decide from API_VERSION, npm and the GitHub Releases"), or the tests or the type-check failed with the new spec. Fix it through a pull request to `main`.
    - **Publish to npm**: the trusted publisher on npm does not match the workflow. Check every field against [the one-time setup](#4-add-the-trusted-publisher-on-npm): organization `SocialAPI-AI`, repository `socialapi-cli`, workflow filename `release.yml`, environment `npm`, and `npm publish` among the allowed actions. A configuration that did not publish within 2 days of its creation has expired: delete it, add it again and publish within 2 days.
    - **Tag and GitHub Release**: the package is already on npm, so only the tag and the Release are left.
 3. [Run the release by hand](#running-the-release-by-hand). This is the way to finish any release: the run starts from the latest commit of `main` and decides again, so it publishes the version when it is not on npm yet, creates the missing tag and GitHub Release when the version is already on npm, and otherwise ends green.
