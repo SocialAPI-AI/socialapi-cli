@@ -1,0 +1,150 @@
+name: Release
+
+# A push of a new API_VERSION to main releases socialapi-cli at that version.
+# A manual run does the same for the current API_VERSION. RELEASING.md explains the flow.
+on:
+  push:
+    branches: [main]
+    paths: [API_VERSION]
+  workflow_dispatch:
+
+# One release at a time; a run in progress is never cancelled.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  check:
+    name: Test and decide
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      action: ${{ steps.decision.outputs.action }}
+      version: ${{ steps.decision.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run generate
+      - run: npm run typecheck
+      - run: npm test
+      - name: Decide from API_VERSION and npm
+        id: decision
+        run: node scripts/release/version.mjs
+      - name: Nothing to release
+        if: steps.decision.outputs.action == 'skip'
+        env:
+          REASON: ${{ steps.decision.outputs.reason }}
+        run: echo "::notice title=No release::$REASON"
+      - name: Already on npm
+        if: steps.decision.outputs.action == 'release'
+        env:
+          REASON: ${{ steps.decision.outputs.reason }}
+        run: echo "::notice title=Tag and GitHub Release only::$REASON"
+      - name: Set the package version (not committed)
+        if: steps.decision.outputs.action == 'publish'
+        env:
+          VERSION: ${{ steps.decision.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version
+      - name: Dry run of the publish
+        if: steps.decision.outputs.action == 'publish'
+        run: npm publish --dry-run
+      - name: Dry-run mode
+        if: steps.decision.outputs.action == 'publish' && vars.PUBLISH != 'true'
+        env:
+          VERSION: ${{ steps.decision.outputs.version }}
+        run: echo "::notice title=Dry run::socialapi-cli@$VERSION is ready. Set the repository variable PUBLISH to true to publish it."
+
+  publish:
+    name: Publish to npm
+    needs: check
+    if: needs.check.outputs.action == 'publish' && vars.PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC), no stored token
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+      - name: Use npm 11.5.1 or later (trusted publishing)
+        run: npm install -g npm@11.20.0
+      - run: npm ci --ignore-scripts
+      - name: Set the package version (not committed)
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version
+      - run: npm publish --provenance --access public
+
+  github-release:
+    name: Tag and GitHub Release
+    needs: [check, publish]
+    if: >-
+      always() && vars.PUBLISH == 'true' && needs.check.result == 'success' && (
+        needs.check.outputs.action == 'release' ||
+        (needs.check.outputs.action == 'publish' && needs.publish.result == 'success')
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the tag and the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          cat > notes.md <<EOF
+          socialapi-cli $VERSION follows the SocialAPI API v$VERSION.
+
+          Install or update it with:
+
+          \`\`\`
+          npm install -g socialapi-cli@$VERSION
+          \`\`\`
+
+          Package: https://www.npmjs.com/package/socialapi-cli/v/$VERSION
+          EOF
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md
+
+  report-failure:
+    name: Report a failed release
+    needs: [check, publish, github-release]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update the release-failed issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          API_VERSION="$(gh api "repos/$GH_REPO/contents/API_VERSION?ref=$GITHUB_SHA" --jq .content | base64 -d | tr -d '[:space:]')" || API_VERSION=""
+          API_VERSION="${API_VERSION:-unknown}"
+          if ! gh label list --search release-failed --json name --jq '.[].name' | grep -qx release-failed; then
+            gh label create release-failed --color d93f0b --description "A release run needs attention"
+          fi
+          BODY="The release run for API version \`$API_VERSION\` did not finish: $RUN_URL
+
+          $GITHUB_SERVER_URL/$GH_REPO/blob/main/RELEASING.md explains how to finish the release."
+          ISSUE="$(gh issue list --label release-failed --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [ -n "$ISSUE" ]; then
+            gh issue comment "$ISSUE" --body "$BODY"
+          else
+            gh issue create --title "Release for API version $API_VERSION needs attention" --label release-failed --body "$BODY"
+          fi
