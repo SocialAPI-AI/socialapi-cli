@@ -4,7 +4,7 @@
 
 ```sh
 npm install -g socialapi-cli
-export SOCIALAPI_API_KEY=sapi_key_...
+socialapi login
 socialapi list-accounts
 ```
 
@@ -18,12 +18,56 @@ This installs the `socialapi` command. It needs Node.js 20 or later and has no o
 
 The version of `socialapi-cli` matches the API release it was generated from: API `v1.10.4` ships as `socialapi-cli@1.10.4`.
 
-## Credentials
+## Sign in
 
-Create an API key in the SocialAPI dashboard, then give it to the CLI in one of these ways (the first one found wins):
+### In the browser
+
+```sh
+socialapi login
+```
+
+`socialapi login` opens the SocialAPI sign-in page in your browser. After you approve access, the CLI creates an API key named `SocialAPI CLI (<hostname>)` for your account and stores it on this computer. The key shows up in the dashboard with the other API keys, where you can revoke it at any time. The sign-in itself is not kept: only the key is stored.
+
+The CLI prints the sign-in URL on stderr too. When the browser does not open (for example on a remote machine over SSH), open that URL yourself. `--no-browser` only prints it:
+
+```sh
+socialapi login --no-browser
+```
+
+The browser hands the result back to the CLI on `http://127.0.0.1:<port>/callback`, so open the URL on the same computer that runs the CLI. The CLI waits 5 minutes for it.
+
+On success, stdout holds `{"logged_in":true,"base_url":"...","user":{...}}` (the user is the `getCurrentUser` response). The key itself is never printed.
+
+### With an existing API key
+
+Create an API key in the SocialAPI dashboard, then:
+
+```sh
+socialapi login --with-api-key < key.txt
+echo "$SOCIALAPI_KEY" | socialapi login --with-api-key
+socialapi login --with-api-key    # on a terminal: asks for the key without echoing it
+```
+
+The CLI checks the key with `getCurrentUser` and stores it only when the API accepts it. An invalid key prints the API's error and exits with code 1.
+
+### Where the key is stored
+
+| System | File |
+| --- | --- |
+| macOS, Linux | `$XDG_CONFIG_HOME/socialapi/config.json`, or `~/.config/socialapi/config.json` when `XDG_CONFIG_HOME` is not set |
+| Windows | `%APPDATA%\socialapi\config.json` |
+
+The directory is readable only by you (mode 0700) and the file too (mode 0600). It holds one key and the base URL it was created for. The stored key is sent only to that base URL: with another `--base-url` or `SOCIALAPI_BASE_URL`, the CLI acts as if no key were stored.
+
+A new `socialapi login` replaces the stored key. When the previous key was created by `socialapi login`, the CLI then deletes it on the API. If that deletion does not go through, the login still succeeds and stderr says which key to delete in the dashboard.
+
+### Which credential is used
+
+The first one found wins:
 
 1. The `--api-key <key>` flag.
 2. The `SOCIALAPI_API_KEY` environment variable.
+3. The key stored by `socialapi login`, for the same base URL.
 
 ```sh
 export SOCIALAPI_API_KEY=sapi_key_...
@@ -31,7 +75,31 @@ socialapi list-accounts
 socialapi list-accounts --api-key sapi_key_...
 ```
 
-The key is sent as `Authorization: Bearer <key>`, only to an `https://` base URL or to `localhost`, `127.0.0.1` or `[::1]`. Any other base URL stops with the error `insecure_base_url` before a request is made.
+The key is sent as `Authorization: Bearer <key>`, only to an `https://` base URL or to `localhost`, `127.0.0.1` or `[::1]`. Any other base URL stops with the error `insecure_base_url` before a request is made. `socialapi login` follows the same rule.
+
+### Check who is signed in
+
+```sh
+socialapi whoami
+```
+
+`socialapi whoami` calls `getCurrentUser` with the credential the CLI would use (flag, environment variable or stored key) and prints the response. Without a credential it exits with code 2 and the error `no_credential`.
+
+### Sign out
+
+```sh
+socialapi logout
+```
+
+`socialapi logout` removes the stored key from this computer. When `socialapi login` created the key in the browser, it also deletes the key on the API. A key stored with `--with-api-key` stays valid on the API: revoke it in the dashboard when you no longer need it.
+
+| Result | stdout | Exit |
+| --- | --- | --- |
+| Key removed | `{"logged_out":true,"base_url":"...","key_deleted":true}` (`false` for a key stored with `--with-api-key`) | 0 |
+| Nothing stored | `{"logged_out":false,"message":"..."}` | 0 |
+| Key removed locally, but deleting it on the API did not go through | nothing; stderr holds the error `key_not_deleted` with the key id to delete in the dashboard | 1 |
+
+`login` and `whoami` take `--base-url`, `--timeout`, `--verbose` and `--pretty` like other commands, and `whoami` takes `--api-key` too. `logout` takes `--timeout`, `--verbose` and `--pretty`, and talks to the base URL stored with the key. `--verbose` never shows the key or the sign-in tokens.
 
 ## Base URL
 
@@ -53,7 +121,7 @@ socialapi create-post --help     # usage, description, arguments and flags of on
 socialapi help create-post       # the same as create-post --help
 ```
 
-Built-in commands: `commands [text] [--json]`, `completion bash|zsh|fish`, `skill`, `help [command]` and `version`. The names `login`, `logout` and `whoami` are reserved for sign-in.
+Built-in commands: `login [--with-api-key] [--no-browser]`, `logout`, `whoami` (see [Sign in](#sign-in)), `commands [text] [--json]`, `completion bash|zsh|fish`, `skill`, `help [command]` and `version`. `socialapi commands` lists the built-ins too, with the tag `Built-in`.
 
 ## Arguments and flags
 
@@ -110,7 +178,7 @@ socialapi list-posts --all
 
 | Flag | Meaning |
 | --- | --- |
-| `--api-key <key>` | API key to send. Default: `SOCIALAPI_API_KEY`. |
+| `--api-key <key>` | API key to send. Default: `SOCIALAPI_API_KEY`, then the key stored by `socialapi login`. |
 | `--base-url <url>` | API base URL. Default: `SOCIALAPI_BASE_URL`, then `https://api.social-api.ai/v1`. |
 | `--data <json>` | Whole JSON request body: inline, `@file`, or `-` for stdin. |
 | `--output <file>` | Write the response body to a file instead of stdout. |
@@ -134,7 +202,7 @@ Binary responses (such as `socialapi get-inbox-media`) go to the file named by `
 | --- | --- |
 | 0 | Success. |
 | 1 | The API returned an error. |
-| 2 | Invalid usage, or no API key. |
+| 2 | Invalid usage, no API key, or the browser sign-in timed out. |
 | 3 | The API could not be reached (network failure or timeout). |
 
 Every error is one JSON document on stderr. When the API returns an error, stderr holds the API's error body as received:
@@ -148,10 +216,22 @@ Errors raised by the CLI itself use the same shape, with one of these codes:
 | Code | Exit | What to do |
 | --- | --- | --- |
 | `invalid_usage` | 2 | Fix the command as the message says; `socialapi <command> --help` shows the arguments and flags. |
-| `no_credential` | 2 | Set `SOCIALAPI_API_KEY` or pass `--api-key`. |
+| `no_credential` | 2 | Run `socialapi login`, set `SOCIALAPI_API_KEY` or pass `--api-key`. |
 | `insecure_base_url` | 2 | Use an `https://` base URL (or localhost). |
 | `network_error` | 3 | Check the network connection and the base URL. |
 | `timeout` | 3 | Try again, or raise `--timeout`. |
+
+Sign-in adds these codes:
+
+| Code | Exit | What to do |
+| --- | --- | --- |
+| `login_timeout` | 2 | The browser sign-in did not finish within 5 minutes. Run `socialapi login` again. |
+| `access_denied` and other OAuth error codes | 1 | The sign-in page did not grant access. Run `socialapi login` again and approve access. |
+| `invalid_state` | 1 | The answer that came back to the CLI did not belong to this login. Run `socialapi login` again. |
+| `invalid_authorization_server` | 1 | The sign-in server at the base URL did not describe its endpoints on the same origin. Check the base URL, or use `socialapi login --with-api-key`. |
+| `invalid_response` | 1 | The server answered with something other than the expected JSON. Check the base URL. |
+| `unsupported_api` | 2 | The API has no operation that sign-in needs. Install the latest `socialapi-cli`, or pass the key with `--api-key` or `SOCIALAPI_API_KEY`. |
+| `key_not_deleted` | 1 | `socialapi logout` removed the key locally; delete the key named in the message in the dashboard. |
 
 ## Rate limits and retries
 
