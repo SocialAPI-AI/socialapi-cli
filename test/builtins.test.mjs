@@ -121,7 +121,7 @@ test('skill prints SKILL.md', async () => {
 
 test('the built-in table holds only reserved names', () => {
   for (const b of builtins) assert.ok(RESERVED_NAMES.includes(b.name), b.name);
-  for (const name of ['commands', 'completion', 'skill', 'help', 'version']) assert.ok(builtins.some((b) => b.name === name), name);
+  for (const name of ['login', 'logout', 'whoami', 'commands', 'completion', 'skill', 'help', 'version']) assert.ok(builtins.some((b) => b.name === name), name);
 });
 
 // Completion
@@ -168,4 +168,27 @@ COMP_WORDS=(socialapi list-accounts --br); COMP_CWORD=2; _socialapi_complete; ec
 test('completion without a known shell exits 2', async () => {
   assert.equal((await cli(['completion'])).code, 2);
   assert.equal((await cli(['completion', 'powershell'])).code, 2);
+});
+
+test('help, commands and every completion script list login, logout and whoami', async () => {
+  const help = (await cli(['--help'])).stdout;
+  const list = (await cli(['commands'])).stdout;
+  const json = JSON.parse((await cli(['commands', '--json'])).stdout);
+  for (const name of ['login', 'logout', 'whoami']) {
+    assert.match(help, new RegExp(`\\n  ${name}\\b`), `help: ${name}`);
+    assert.match(list, new RegExp(`^${name} `, 'm'), `commands: ${name}`);
+    const item = json.find((i) => i.name === name);
+    assert.ok(item, `commands --json: ${name}`);
+    assert.equal(item.tag, 'Built-in');
+    assert.equal(typeof item.summary, 'string');
+    for (const shell of ['bash', 'zsh', 'fish']) assert.ok((await cli(['completion', shell])).stdout.includes(name), `${shell}: ${name}`);
+  }
+  const bash = (await cli(['completion', 'bash'])).stdout;
+  assert.match(bash, /login\) words="[^"]*--with-api-key[^"]*--no-browser/);
+});
+
+test('commands <text> finds the sign-in built-ins', async () => {
+  const names = JSON.parse((await cli(['commands', 'API', 'key', '--json'])).stdout).map((i) => i.name);
+  assert.ok(names.includes('login'));
+  assert.ok(names.includes('logout'));
 });

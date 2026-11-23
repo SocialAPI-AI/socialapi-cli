@@ -1,4 +1,7 @@
 // The single table of built-in commands. Help, `commands` and completion read it.
+import { login } from '../auth/login.mjs';
+import { logout } from '../auth/logout.mjs';
+import { whoami } from '../auth/whoami.mjs';
 import { commands } from './commands.mjs';
 import { completion } from './completion.mjs';
 import { help } from './help.mjs';
@@ -12,4 +15,4 @@ export const RESERVED_NAMES = ['login', 'logout', 'whoami', 'commands', 'complet
  * @typedef {{ name: string, usage: string, summary: string, run: (args: string[], ctx: import('../main.mjs').Context) => Promise<number> | number }} Builtin
  * @type {Builtin[]}
  */
-export const builtins = [commands, completion, skill, help, version];
+export const builtins = [login, logout, whoami, commands, completion, skill, help, version];

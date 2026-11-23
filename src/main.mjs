@@ -10,7 +10,7 @@ import { unknownCommand } from './suggest.mjs';
 /**
  * @typedef {{ write(chunk: string | Uint8Array): any, isTTY?: boolean }} Output
  * @typedef {{ env: Record<string, string | undefined>, stdin: NodeJS.ReadableStream, stdout: Output, stderr: Output,
- *   manifest: import('../scripts/generate.mjs').Manifest, builtins: import('./builtins/index.mjs').Builtin[] }} Context
+ *   manifest: import('../scripts/generate.mjs').Manifest, builtins: import('./builtins/index.mjs').Builtin[], loginTimeoutMs: number }} Context
  */
 
 const VALUE_GLOBALS = GLOBAL_FLAGS.filter((g) => g.type !== 'boolean').map((g) => `--${g.flag}`);
@@ -28,7 +28,8 @@ function commandIndex(argv) {
 /**
  * Runs the CLI and returns its exit code.
  * @param {string[]} argv
- * @param {{ env?: Context['env'], stdin?: Context['stdin'], stdout?: Output, stderr?: Output, manifest?: Context['manifest'] }} [options]
+ * `loginTimeoutMs` is how long `socialapi login` waits for the browser (5 minutes; tests shorten it).
+ * @param {{ env?: Context['env'], stdin?: Context['stdin'], stdout?: Output, stderr?: Output, manifest?: Context['manifest'], loginTimeoutMs?: number }} [options]
  */
 export async function main(argv, options = {}) {
   /** @type {Context['manifest'] | undefined} */
@@ -44,6 +45,7 @@ export async function main(argv, options = {}) {
       return manifest;
     },
     builtins,
+    loginTimeoutMs: options.loginTimeoutMs ?? 5 * 60 * 1000,
   };
 
   try {
@@ -78,7 +80,8 @@ export async function main(argv, options = {}) {
     throw unknownCommand(name, ctx);
   } catch (error) {
     if (!(error instanceof CliError)) throw error;
-    ctx.stderr.write(`${JSON.stringify({ error: { code: error.code, message: error.message } })}\n`);
+    const body = error.body ?? JSON.stringify({ error: { code: error.code, message: error.message } });
+    ctx.stderr.write(body.endsWith('\n') ? body : `${body}\n`);
     return error.exitCode;
   }
 }

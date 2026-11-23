@@ -3,8 +3,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { text } from 'node:stream/consumers';
-import { resolveCredential } from './credentials.mjs';
-import { CliError, EXIT, usageError } from './errors.mjs';
+import { noCredential, resolveCredential } from './credentials.mjs';
+import { EXIT, usageError } from './errors.mjs';
 import { GLOBAL_FLAGS } from './flags.mjs';
 import { send } from './http.mjs';
 import { writeJson } from './output.mjs';
@@ -19,6 +19,32 @@ import { nearest } from './suggest.mjs';
 /** Base URL: --base-url, then SOCIALAPI_BASE_URL, then the spec's server URL. */
 export function resolveBaseUrl(flag, env, manifest) {
   return (flag || env.SOCIALAPI_BASE_URL || manifest.baseUrl).replace(/\/+$/, '');
+}
+
+/**
+ * The base URL to call, checked: --base-url, then SOCIALAPI_BASE_URL, then the spec's server URL.
+ * @returns {{ base: string, url: URL }} `base` has no trailing slash
+ */
+export function parseBaseUrl(flag, env, manifest) {
+  const base = resolveBaseUrl(flag, env, manifest);
+  let url;
+  try {
+    url = new URL(base);
+  } catch {
+    throw usageError(`The base URL "${base}" is not a valid URL. Pass a full URL such as https://api.example.com/v1.`);
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw usageError(`The base URL "${base}" must start with https:// or http://.`);
+  return { base, url };
+}
+
+/** Seconds to wait for each response, from --timeout (default 60, 0 waits forever). */
+export function parseTimeout(raw) {
+  if (raw === undefined) return 60;
+  const seconds = Number(raw);
+  if (raw.trim() === '' || !Number.isFinite(seconds) || seconds < 0) {
+    throw usageError(`--timeout takes a number of seconds (0 waits forever), not "${raw}".`);
+  }
+  return seconds;
 }
 
 /** The global flags a command accepts (`--all` only on paginated commands). */
@@ -220,22 +246,8 @@ export async function runOperation(cmd, argv, ctx) {
     if (!present) throw usageError(`Missing required ${flag.in === 'body' ? 'field' : 'flag'} --${flag.flag}${global.data !== undefined && flag.in === 'body' ? ` (or "${flag.name}" in --data)` : ''}. Run socialapi ${cmd.name} --help for details.`);
   }
 
-  let timeoutSeconds = 60;
-  if (global.timeout !== undefined) {
-    timeoutSeconds = Number(global.timeout);
-    if (global.timeout.trim() === '' || !Number.isFinite(timeoutSeconds) || timeoutSeconds < 0) {
-      throw usageError(`--timeout takes a number of seconds (0 waits forever), not "${global.timeout}".`);
-    }
-  }
-
-  const base = resolveBaseUrl(global['base-url'], ctx.env, ctx.manifest);
-  let baseUrl;
-  try {
-    baseUrl = new URL(base);
-  } catch {
-    throw usageError(`The base URL "${base}" is not a valid URL. Pass a full URL such as https://api.example.com/v1.`);
-  }
-  if (baseUrl.protocol !== 'https:' && baseUrl.protocol !== 'http:') throw usageError(`The base URL "${base}" must start with https:// or http://.`);
+  const timeoutSeconds = parseTimeout(global.timeout);
+  const { base, url: baseUrl } = parseBaseUrl(global['base-url'], ctx.env, ctx.manifest);
 
   if (cmd.response === 'binary' && global.output === undefined && ctx.stdout.isTTY) {
     throw usageError(`${cmd.name} returns binary data. Pass --output <file>, or pipe stdout to a file or another command.`);
@@ -244,7 +256,7 @@ export async function runOperation(cmd, argv, ctx) {
   let token;
   if (cmd.auth) {
     const credential = resolveCredential({ apiKeyFlag: global['api-key'], env: ctx.env, baseUrl: base });
-    if (!credential) throw new CliError('no_credential', 'No API key found. Set the SOCIALAPI_API_KEY environment variable or pass --api-key.');
+    if (!credential) throw noCredential();
     token = credential.token;
   }
 
